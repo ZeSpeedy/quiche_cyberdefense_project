@@ -184,6 +184,12 @@ pub enum Frame {
     DatagramHeader {
         length: usize,
     },
+
+    ObservedAddress{
+        seq_num: u64,
+        ip: std::net::IpAddr,
+        port: u16,
+    },
 }
 
 impl Frame {
@@ -325,6 +331,26 @@ impl Frame {
             0x1d => Frame::ApplicationClose {
                 error_code: b.get_varint()?,
                 reason: b.get_bytes_with_varint_length()?.to_vec(),
+            },
+
+            0x9f81a6 | 0x9f81a7 => Frame::ObservedAddress {
+                seq_num: b.get_varint()?,
+                ip: if frame_type & 0x1 == 0 {
+                    // LSB 0 → IPv4
+                    let octets = b.get_bytes(4)?;
+                    let octets = octets.buf();
+                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(
+                        octets[0], octets[1], octets[2], octets[3]
+                    ))
+                } else {
+                    // LSB 1 → IPv6
+                    let octets = b.get_bytes(16)?;
+                    let octets = octets.buf();
+                    std::net::IpAddr::V6(std::net::Ipv6Addr::from(
+                        <[u8; 16]>::try_from(octets).map_err(|_| Error::InvalidFrame)?
+                    ))
+                },
+                port: b.get_u16()?,
             },
 
             0x1e => Frame::HandshakeDone,

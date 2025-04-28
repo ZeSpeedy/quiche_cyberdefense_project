@@ -54,6 +54,7 @@ pub struct CommonArgs {
     pub qpack_max_table_capacity: Option<u64>,
     pub qpack_blocked_streams: Option<u64>,
     pub initial_cwnd_packets: u64,
+    pub addr_disc_behavior: u64,
 }
 
 /// Creates a new `CommonArgs` structure using the provided [`Docopt`].
@@ -153,6 +154,9 @@ impl Args for CommonArgs {
 
         let enable_active_migration = args.get_bool("--enable-active-migration");
 
+        let addr_disc_behavior = args.get_str("--address-discovery");
+        let addr_disc_behavior = addr_disc_behavior.parse::<u64>().unwrap();
+
         let max_field_section_size =
             if !args.get_str("--max-field-section-size").is_empty() {
                 Some(
@@ -214,6 +218,7 @@ impl Args for CommonArgs {
             qpack_max_table_capacity,
             qpack_blocked_streams,
             initial_cwnd_packets,
+            addr_disc_behavior,
         }
     }
 }
@@ -243,6 +248,7 @@ impl Default for CommonArgs {
             qpack_max_table_capacity: None,
             qpack_blocked_streams: None,
             initial_cwnd_packets: 10,
+            addr_disc_behavior:0,
         }
     }
 }
@@ -289,6 +295,7 @@ Options:
   --session-file PATH      File used to cache a TLS session for resumption.
   --source-port PORT       Source port to use when connecting to the server [default: 0].
   --initial-cwnd-packets PACKETS   The initial congestion window size in terms of packet count [default: 10].
+  --address-discovery BEHAVIOR   Address discovery behavior [default: 0].
   -h --help                Show this screen.
 ";
 
@@ -464,6 +471,7 @@ Options:
   --disable-gso               Disable GSO (linux only).
   --disable-pacing            Disable pacing (linux only).
   --initial-cwnd-packets PACKETS      The initial congestion window size in terms of packet count [default: 10].
+  --address-discovery BEHAVIOR   Address discovery behavior [default: 0].
   -h --help                   Show this screen.
 ";
 

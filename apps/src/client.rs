@@ -129,6 +129,8 @@ pub fn connect(
     config.set_max_connection_window(conn_args.max_window);
     config.set_max_stream_window(conn_args.max_stream_window);
 
+    config.set_address_discovery(conn_args.addr_disc_behavior);
+
     let mut keylog = None;
 
     if let Some(keylog_path) = std::env::var_os("SSLKEYLOGFILE") {
@@ -181,7 +183,7 @@ pub fn connect(
     };
 
     let scid = quiche::ConnectionId::from_ref(&scid);
-
+  
     let local_addr = socket.local_addr().unwrap();
 
     // Create a QUIC connection and initiate handshake.

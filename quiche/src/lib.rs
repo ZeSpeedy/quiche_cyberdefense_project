@@ -576,6 +576,9 @@ pub enum Error {
 
     /// The peer sent more data in CRYPTO frames than we can buffer.
     CryptoBufferExceeded,
+
+    /// Transport Parameter Erro
+    TransportParameterError,
 }
 
 /// QUIC error codes sent on the wire.
@@ -1354,6 +1357,11 @@ impl Config {
     /// The default value is `false`.
     pub fn set_disable_dcid_reuse(&mut self, v: bool) {
         self.disable_dcid_reuse = v;
+    }
+
+    ///set address discovery
+    pub fn set_address_discovery(&mut self, v: u64){
+        self.local_transport_params.address_discovery = v;
     }
 
     /// Enables tracking unknown transport parameters.
@@ -8211,6 +8219,8 @@ pub struct TransportParams {
     /// Unknown peer transport parameters and values, if any.
     pub unknown_params: Option<UnknownTransportParameters>,
     // pub preferred_address: ...,
+    /// Address discovery behavior.
+    pub address_discovery: u64,
 }
 
 impl Default for TransportParams {
@@ -8233,6 +8243,7 @@ impl Default for TransportParams {
             initial_source_connection_id: None,
             retry_source_connection_id: None,
             max_datagram_frame_size: None,
+            address_discovery: 0,
             unknown_params: Default::default(),
         }
     }
@@ -8391,6 +8402,16 @@ impl TransportParams {
 
                 0x0020 => {
                     tp.max_datagram_frame_size = Some(val.get_varint()?);
+                },
+
+                0x9f81a176 => {
+                    let address_discovery = val.get_varint()?;
+
+                    if address_discovery > 2 {
+                        return Err(Error::TransportParameterError);
+                    }
+
+                    tp.address_discovery = address_discovery;
                 },
 
                 // Track unknown transport parameters specially.
@@ -8562,6 +8583,15 @@ impl TransportParams {
                 octets::varint_len(max_datagram_frame_size),
             )?;
             b.put_varint(max_datagram_frame_size)?;
+        }
+        
+        if tp.address_discovery != 0 {
+            TransportParams::encode_param(
+                &mut b,
+                0x9f81a176,
+                octets::varint_len(tp.address_discovery),
+            )?;
+            b.put_varint(tp.address_discovery)?;
         }
 
         let out_len = b.off();

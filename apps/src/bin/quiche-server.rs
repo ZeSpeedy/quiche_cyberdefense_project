@@ -129,6 +129,8 @@ fn main() {
 
     config.enable_pacing(pacing);
 
+    config.set_address_discovery(conn_args.addr_disc_behavior);
+
     let mut keylog = None;
 
     if let Some(keylog_path) = std::env::var_os("SSLKEYLOGFILE") {
