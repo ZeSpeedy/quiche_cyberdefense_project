@@ -384,6 +384,16 @@ impl Frame {
             (packet::Type::Short, _) => true,
             (packet::Type::ZeroRTT, _) => true,
 
+            // Interdire OBSERVED_ADDRESS en 0-RTT
+            (packet::Type::ZeroRTT, Frame::ObservedAddress { .. }) => false,
+
+            // Autoriser OBSERVED_ADDRESS en 1-RTT
+            (packet::Type::Short, Frame::ObservedAddress { .. }) => true,
+
+            // Toutes les autres frames Short/0-RTT restent inchangées
+            (packet::Type::Short, _) => true,
+            (packet::Type::ZeroRTT, _) => true,
+
             // All other cases are forbidden.
             (..) => false,
         };
@@ -619,6 +629,22 @@ impl Frame {
             },
 
             Frame::DatagramHeader { .. } => (),
+
+            Frame::ObservedAddress { seq_num, ip, port } => {
+                // Choix du type selon IPv4/IPv6
+                let ty = match ip {
+                    std::net::IpAddr::V4(_) => 0x9f81a6,
+                    std::net::IpAddr::V6(_) => 0x9f81a7,
+                };
+                b.put_varint(ty)?;
+                b.put_varint(*seq_num)?;
+                match ip {
+                    std::net::IpAddr::V4(v4) => b.put_bytes(&v4.octets())?,
+                    std::net::IpAddr::V6(v6) => b.put_bytes(&v6.octets())?,
+                }
+                b.put_u16(*port)?;
+            }
+
         }
 
         Ok(before - b.cap())
@@ -834,6 +860,16 @@ impl Frame {
                 2 + // length, always encode as 2-byte varint
                 *length // data
             },
+
+            Frame::ObservedAddress { seq_num, ip, .. } => {
+                let ty = if let std::net::IpAddr::V6(_) = ip { 0x9f81a7 } else { 0x9f81a6 };
+                let ip_len = if let std::net::IpAddr::V6(_) = ip { 16 } else { 4 };
+                octets::varint_len(ty)           // type
+                + octets::varint_len(*seq_num)   // sequence
+                + ip_len                          // adresse
+                + 2                               // port (u16)
+            }
+
         }
     }
 
@@ -854,7 +890,8 @@ impl Frame {
             Frame::Padding { .. } |
                 Frame::NewConnectionId { .. } |
                 Frame::PathChallenge { .. } |
-                Frame::PathResponse { .. }
+                Frame::PathResponse { .. } |
+                Frame::ObservedAddress { .. }
         )
     }
 
@@ -2145,4 +2182,76 @@ mod tests {
 
         assert_eq!(frame_data, data);
     }
+
+    #[test]
+    fn observed_address_ipv4_roundtrip() {
+        use super::*;
+        use octets::{Octets, OctetsMut};
+    
+        let frame = Frame::ObservedAddress {
+            seq_num: 42,
+            ip: "192.0.2.1".parse().unwrap(),
+            port: 4242,
+        };
+    
+        // Sérialisation
+        let mut buf = [0u8; 64];
+        let wire_len = {
+            let mut b = OctetsMut::with_slice(&mut buf);
+            frame.to_bytes(&mut b).unwrap()
+        };
+    
+        // Vérifie que to_bytes() renvoie la même taille que wire_len()
+        assert_eq!(wire_len, frame.wire_len());
+    
+        // Désérialisation sur Short packets (1-RTT)
+        let mut r = Octets::with_slice(&buf);
+        let got = Frame::from_bytes(&mut r, packet::Type::Short).unwrap();
+        assert_eq!(got, frame);
+    }
+    
+    #[test]
+    fn observed_address_ipv6_roundtrip() {
+        use super::*;
+        use octets::{Octets, OctetsMut};
+    
+        let frame = Frame::ObservedAddress {
+            seq_num: 7,
+            ip: "::1".parse().unwrap(),
+            port: 80,
+        };
+    
+        let mut buf = [0u8; 128];
+        let wire_len = {
+            let mut b = OctetsMut::with_slice(&mut buf);
+            frame.to_bytes(&mut b).unwrap()
+        };
+        assert_eq!(wire_len, frame.wire_len());
+    
+        let mut r = Octets::with_slice(&buf);
+        let got = Frame::from_bytes(&mut r, packet::Type::Short).unwrap();
+        assert_eq!(got, frame);
+    }
+    
+    #[test]
+    fn observed_address_not_allowed_in_0rtt() {
+        use super::*;
+        use octets::{Octets, OctetsMut};
+    
+        let frame = Frame::ObservedAddress {
+            seq_num: 1,
+            ip: "198.51.100.5".parse().unwrap(),
+            port: 1234,
+        };
+    
+        let mut buf = [0u8; 64];
+        let _ = {
+            let mut b = OctetsMut::with_slice(&mut buf);
+            frame.to_bytes(&mut b).unwrap()
+        };
+    
+        let mut r = Octets::with_slice(&buf);
+        assert!(Frame::from_bytes(&mut r, packet::Type::ZeroRTT).is_err());
+    }
+    
 }
