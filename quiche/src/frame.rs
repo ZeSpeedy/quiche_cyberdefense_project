@@ -380,17 +380,13 @@ impl Frame {
             (_, Frame::Crypto { .. }) => true,
             (_, Frame::ConnectionClose { .. }) => true,
 
-            // All frames are allowed on 0-RTT and 1-RTT packets.
-            (packet::Type::Short, _) => true,
-            (packet::Type::ZeroRTT, _) => true,
-
             // Interdire OBSERVED_ADDRESS en 0-RTT
             (packet::Type::ZeroRTT, Frame::ObservedAddress { .. }) => false,
 
             // Autoriser OBSERVED_ADDRESS en 1-RTT
             (packet::Type::Short, Frame::ObservedAddress { .. }) => true,
 
-            // Toutes les autres frames Short/0-RTT restent inchangées
+            // All frames are allowed on 0-RTT and 1-RTT packets.
             (packet::Type::Short, _) => true,
             (packet::Type::ZeroRTT, _) => true,
 
@@ -1096,6 +1092,9 @@ impl Frame {
                 length: *length as u64,
                 raw: None,
             },
+            
+	    Frame::ObservedAddress { .. } => unreachable!("qlog for ObservedAddress not implemented"),
+
         }
     }
 }
@@ -1262,6 +1261,16 @@ impl std::fmt::Debug for Frame {
 
             Frame::DatagramHeader { length } => {
                 write!(f, "DATAGRAM len={length}")?;
+            },
+            
+            Frame::ObservedAddress { seq_num, ip, port } => {
+                write!(
+                    f,
+                    "OBSERVED_ADDRESS seq={} addr={}:{}",
+                    seq_num,
+                    ip,
+                    port
+                )?;
             },
         }
 

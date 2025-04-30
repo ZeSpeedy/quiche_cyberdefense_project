@@ -7685,6 +7685,19 @@ impl Connection {
             },
 
             frame::Frame::DatagramHeader { .. } => unreachable!(),
+
+            frame::Frame::ObservedAddress { seq_num, ip, port } => {
+		// Pour l’instant on se contente de logguer l’event,
+		// plus tard on pourra exposer ça à l’application.
+		trace!(
+			"{} rx OBSERVED_ADDRESS seq={} addr={}:{}",
+			self.trace_id,
+			seq_num,
+			ip,
+			port
+		    );
+		},
+
         }
 
         Ok(())
@@ -9413,6 +9426,7 @@ mod tests {
             initial_source_connection_id: Some(b"woot woot".to_vec().into()),
             retry_source_connection_id: Some(b"retry".to_vec().into()),
             max_datagram_frame_size: Some(32),
+            address_discovery: 0,
             unknown_params: Default::default(),
         };
 
@@ -9444,6 +9458,7 @@ mod tests {
             initial_source_connection_id: Some(b"woot woot".to_vec().into()),
             retry_source_connection_id: None,
             max_datagram_frame_size: Some(32),
+            address_discovery: 0,
             unknown_params: Default::default(),
         };
 
